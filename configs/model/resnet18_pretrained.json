@@ -1,5 +1,0 @@
-{
-  "model_name": "resnet18",
-  "pretrain": true,
-  "ret_emb": true
-}

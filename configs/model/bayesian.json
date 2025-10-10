@@ -1,0 +1,10 @@
+{
+  "model_name": "bayesian",
+  "pretrain": false,
+  "ret_emb": false,
+  "prior_sigma": 1,
+  "sampling": "nuts",
+  "draws": 100,
+  "tune": 100,
+  "chains": 4
+}

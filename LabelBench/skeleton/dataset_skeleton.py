@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from enum import Enum
 from torch.utils.data import Dataset
+from sklearn.decomposition import PCA
 from LabelBench.dataset.feature_extractor import FeatureExtractor
 
 
@@ -99,6 +100,7 @@ class TransformDataset(Dataset):
         else:
             x_orig, y = self.dataset[item]
 
+        x = x_orig
         if self.__transform:
             x = self.__transform(x_orig)
         if self.__target_transform:
@@ -175,6 +177,7 @@ class ALDataset:
         self.train_emb = None
         self.val_emb = None
         self.test_emb = None
+        self.pca = None
         self.__train_emb_mean = train_emb_mean
         self.__train_emb_std = train_emb_std
         self.__labeled_idxs = None
@@ -203,6 +206,13 @@ class ALDataset:
         self.train_dataset.set_noisy_labels(np.array(self.__noisy_train_labels))
         self.train()
 
+    def set_pca(self, feature_extractor):
+        assert isinstance(feature_extractor, FeatureExtractor), "Feature extractor must be a FeatureExtractor."
+        feat_emb = feature_extractor.get_feature(self.train_dataset, "train", 0, False)
+        self.pca = PCA(n_components=0.99, svd_solver="full")
+        self.pca.fit(feat_emb)
+        return self.pca.n_components_
+
     def update_embedding_dataset(self, epoch, feature_extractor, use_strong=False):
         """
         Update the embedding dataset with the updat_embed_dataset_fn and the current epoch.
@@ -216,6 +226,7 @@ class ALDataset:
         for _, dataset_split in enumerate(["train", "val", "test"]):
             dataset = getattr(self, dataset_split + "_dataset")
             feat_emb = feature_extractor.get_feature(dataset, dataset_split, epoch, use_strong)
+            feat_emb = self.pca.transform(feat_emb) # PCA on features
             setattr(self, dataset_split + "_emb", feat_emb)
 
     def update_labeled_idxs(self, new_idxs):
@@ -275,10 +286,12 @@ class ALDataset:
 
     def get_embedding_dim(self):
         """Dimension of the embedding."""
-        assert self.train_emb is not None, "Embedding is not initialized."
-        if isinstance(self.train_emb, tuple):
-            return self.train_emb[0].shape[1]
-        return self.train_emb.shape[1]
+        if self.train_emb is not None:
+            if isinstance(self.train_emb, tuple):
+                return self.train_emb[0].shape[1]
+            return self.train_emb.shape[1]
+        else:
+            return self.train_dataset.dataset.X.shape[1]
 
     def get_input_datasets(self):
         """

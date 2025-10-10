@@ -7,8 +7,16 @@ from torchvision.datasets import CIFAR100
 from LabelBench.skeleton.dataset_skeleton import DatasetOnMemory, LabelType, register_dataset, TransformDataset
 from LabelBench.dataset.dataset_impl.label_name.classnames import get_classnames
 
-@register_dataset("cifar100_imb", LabelType.MULTI_CLASS)
-def get_cifar100_imb_dataset(n_class, data_dir, *args):
+
+def get_cifar100_datasets(n_class, data_dir):
+    target_transform = transforms.Compose(
+        [lambda x: torch.LongTensor([x]),
+         lambda x: torch.flatten(F.one_hot(torch.clip(x, min=None, max=n_class - 1), n_class))])
+    train_dataset = CIFAR100(data_dir, train=True, download=True, target_transform=target_transform)
+    test_dataset = CIFAR100(data_dir, train=False, download=True, target_transform=target_transform)
+    return train_dataset, test_dataset
+
+def transform_cifar100_datasets(n_class, train_dataset, test_dataset):
     train_transform = transforms.Compose([
         transforms.RandomCrop(32, padding=4),
         transforms.RandomHorizontalFlip(),
@@ -18,13 +26,7 @@ def get_cifar100_imb_dataset(n_class, data_dir, *args):
     test_transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761))])
-    target_transform = transforms.Compose(
-        [lambda x: torch.LongTensor([x]),
-         lambda x: torch.flatten(F.one_hot(torch.clip(x, min=None, max=n_class - 1), n_class))])
-
-    train_dataset = CIFAR100(data_dir, train=True, download=True, target_transform=target_transform)
-    test_dataset = CIFAR100(data_dir, train=False, download=True, target_transform=target_transform)
-
+    
     rnd = np.random.RandomState(42)
     idxs = rnd.permutation(len(test_dataset))
     val_idxs, test_idxs = idxs[:-len(idxs) // 2], idxs[-len(idxs) // 2:]
@@ -40,6 +42,18 @@ def get_cifar100_imb_dataset(n_class, data_dir, *args):
            TransformDataset(val_dataset, transform=test_transform), \
            TransformDataset(test_dataset, transform=test_transform), None, None, None, n_class, classnames
 
+@register_dataset("cifar100_imb", LabelType.MULTI_CLASS)
+def get_cifar100_imb_dataset(n_class, data_dir, *args):
+    train_dataset, test_dataset = get_cifar100_datasets(n_class, data_dir)
+    return transform_cifar100_datasets(n_class, train_dataset, test_dataset)
+
+@register_dataset("cifar100_shift", LabelType.MULTI_CLASS)
+def get_cifar100_shift_dataset(n_class, data_dir, *args):
+    train_dataset, test_dataset = get_cifar100_datasets(n_class, data_dir)
+    target_classes = list(range(n_class - 1))
+    test_indices_to_keep = [i for i, target in enumerate(test_dataset.targets) if target in target_classes]
+    test_dataset = Subset(test_dataset, test_indices_to_keep)
+    return transform_cifar100_datasets(n_class, train_dataset, test_dataset)
 
 @register_dataset("cifar100", LabelType.MULTI_CLASS)
 def get_cifar100_dataset(data_dir, *args):

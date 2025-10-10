@@ -1,4 +1,6 @@
 from enum import IntEnum
+import numpy as np
+from scipy.stats import gumbel_r
 
 
 class ALInput(IntEnum):
@@ -69,13 +71,14 @@ class Strategy:
     """
     Abstract class for active learning strategies.
     """
-    def __init__(self, strategy_config, dataset):
+    def __init__(self, strategy_config, trainer):
         """
         :param Dict strategy_config: dictionary mapping from parameter name to value.
         :param ALDataset dataset: ALDataset object containing all of training/validation/testing data and embeddings.
         """
         self.strategy_config = strategy_config
-        self.dataset = dataset
+        self.trainer = trainer
+        self.dataset = trainer.dataset
         self.input_types = None
 
     def __init_subclass__(cls, **kwargs):
@@ -94,3 +97,24 @@ class Strategy:
         :return: A list of indexes of the original dataset indexing the batch for annotation.
         """
         pass
+
+    def get_softmax_samples(self, scores_N, beta, aquisition_batch_size):
+        '''
+        Adapted from https://arxiv.org/pdf/2106.12059
+        '''
+        noised_scores_N = np.array(scores_N) + gumbel_r.rvs(loc=0, scale=1 / beta, size=len(scores_N), random_state=None)
+        return np.argsort(noised_scores_N)[-aquisition_batch_size:]
+        
+    def get_power_samples(self, scores_N, beta, aquisition_batch_size):
+        '''
+        Adapted from https://arxiv.org/pdf/2106.12059
+        '''
+        return self.get_softmax_samples(np.log(np.array(scores_N)), beta=beta, aquisition_batch_size=aquisition_batch_size)
+        
+    def get_softrank_samples(self, scores_N, beta, aquisition_batch_size):
+        '''
+        Adapted from https://arxiv.org/pdf/2106.12059
+        '''
+        sorted_indices_N = np.argsort(-np.array(scores_N))
+        ranks_N = np.argsort(sorted_indices_N) + 1
+        return self.get_power_samples(1 / ranks_N, beta=beta, aquisition_batch_size=aquisition_batch_size)

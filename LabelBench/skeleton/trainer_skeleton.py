@@ -1,4 +1,6 @@
 import numpy as np
+import torch
+
 
 # All trainers.
 trainers = {}
@@ -54,6 +56,7 @@ class Trainer:
         self.metric = metric
         self._eval_results = [None for _ in range(12)]
         self.feature_extractor = feature_extractor
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
     def __init_subclass__(cls, **kwargs):
         """Register trainer subclasses."""

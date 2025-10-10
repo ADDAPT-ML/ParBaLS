@@ -1,8 +1,0 @@
-ALBench
-===
-
-.. autosummary::
-   :toctree: generated
-   :recursive:
-
-   ALBench

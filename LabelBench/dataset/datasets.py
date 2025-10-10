@@ -9,16 +9,28 @@ from LabelBench.skeleton.dataset_skeleton import ALDataset, datasets
 
 
 def get_dataset(name, data_dir):
-    if "_imb_" in name:
+    if "_shift_" in name:
         n_class = int(name.split("_")[-1])
         name = name[:-(len(name.split("_")[-1]) + 1)]
+    elif "_imb_" in name:
+        n_class = int(name.split("_")[-1])
+        name = name[:-(len(name.split("_")[-1]) + 1)]
+    elif "kaggle_tabular_" in name:
+        target_column = name.split("_")[-1]
+        dataset_link = f"{name.split('_')[-3]}/{name.split('_')[-2]}"
+        name = "kaggle_tabular"
     else:
         n_class = None
     data_type, get_fn = datasets[name]
-    if n_class is None:
+    if name == "kaggle_tabular":
+        name = "kaggle_tabular_" + dataset_link.replace('/', '_')
+        train_dataset, val_dataset, test_dataset, train_labels, val_labels, test_labels, num_classes, classnames = \
+            get_fn(dataset_link, data_dir, target_column)
+    elif n_class is None:
         train_dataset, val_dataset, test_dataset, train_labels, val_labels, test_labels, num_classes, classnames = \
             get_fn(data_dir)
     else:
+        name = name + "_" + str(n_class)
         train_dataset, val_dataset, test_dataset, train_labels, val_labels, test_labels, num_classes, classnames = \
             get_fn(n_class, data_dir)
 
@@ -47,9 +59,9 @@ def get_labels(dataset, data_dir, name, split):
 
     if os.path.exists(f'{folder_name}_{name}_{split}.pt'):
         print(f"Loading labels from {folder_name}_{name}_{split}.pt")
-        labels = torch.load(f'{folder_name}_{name}_{split}.pt')
+        labels = torch.load(f'{folder_name}_{name}_{split}.pt', weights_only=False)
     else:
-        loader = DataLoader(dataset, batch_size=500, shuffle=False, num_workers=40, drop_last=False)
+        loader = DataLoader(dataset, batch_size=500, shuffle=False, num_workers=0, drop_last=False)
         labels = []
         print("Getting labels...")
         for _, target in tqdm(loader):

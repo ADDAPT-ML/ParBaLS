@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import copy
 
 import numpy as np
 import torch
@@ -22,6 +23,8 @@ if __name__ == "__main__":
     parser.add_argument("--metric", type=str, help="Metric name.")
     parser.add_argument("--batch_size", type=int,
                         help="We train neural network after collecting batch_size number of new labels.")
+    parser.add_argument("--later_batch_size", type=int, default=None,
+                        help="The batch size after the initial batch.")
     parser.add_argument("--num_batch", type=int, help="Number of batches of collected labels.")
     parser.add_argument("--embed_model_config", type=str, help="Path to the encoder model configuration file.",
                         default="none.json")
@@ -32,15 +35,22 @@ if __name__ == "__main__":
                         default="noiseless.json")
     args = parser.parse_args()
 
+    if torch.cuda.is_available():
+        print(f"Number of GPUs available: {torch.cuda.device_count()}")
+        print(f"GPU Name: {torch.cuda.get_device_name(0)}")
+        torch.backends.cudnn.benchmark = True
+    else:
+        print("Running on CPU...")
+
     seed = args.seed
     torch.manual_seed(seed)
-    torch.backends.cudnn.benchmark = True
     np.random.seed(seed + 42)
 
     wandb_name = args.wandb_name
     dataset_name = args.dataset
     metric_name = args.metric
     batch_size = args.batch_size
+    later_batch_size = args.later_batch_size
     data_dir = args.data_dir
     num_batch = args.num_batch
 
@@ -57,7 +67,7 @@ if __name__ == "__main__":
         corrupter_config = json.load(f)
 
     run_name = "%s, embed_model = %s, classifier_model=%s" % (
-        strategy_config["strategy_name"], embed_model_config["model_name"], classifier_model_config["model_name"])
+        args.strategy_config.split('.')[0], embed_model_config["model_name"], classifier_model_config["model_name"])
     wandb.init(project="Active Learning, %s, Batch Size=%d" % (dataset_name, batch_size), entity=wandb_name,
                name=run_name, config=vars(args))
 
@@ -79,10 +89,15 @@ if __name__ == "__main__":
         folder_name = os.path.join(data_dir, dataset_name)
         os.makedirs(folder_name, exist_ok=True)
         file_name = "{}/{}_{}".format(folder_name, dataset_name, embed_model_config["model_name"])
-        classifier_model_config["input_dim"] = embed_model_fn(embed_model_config).get_embedding_dim()
+        # classifier_model_config["input_dim"] = embed_model_fn(embed_model_config).get_embedding_dim()
         feature_extractor = FeatureExtractor(embed_model_fn, file_name, embed_model_config)
+        classifier_model_config["input_dim"] = dataset.set_pca(feature_extractor) # Reduced by PCA after feature extractor
+        print("PCA dim:", classifier_model_config["input_dim"])
     else:
         feature_extractor = None
+        if classifier_model_config["model_name"] in ["linear", "bayesian"]:
+            classifier_model_config["input_dim"] = dataset.get_embedding_dim()
+            print(classifier_model_config["model_name"], "dim:", classifier_model_config["input_dim"])
 
     # Retrieve metric object.
     metric = get_metric(metric_name)
@@ -94,27 +109,50 @@ if __name__ == "__main__":
     trainer_config = get_fns(trainer_config)
     trainer_config = get_optimizer_fn(trainer_config)
     trainer_config = get_scheduler_fn(trainer_config)
+    trainer_config["budget_per_iter"] = batch_size
     trainer = get_trainer(trainer_config["trainer_name"], trainer_config, dataset, model_fn, classifier_model_config,
                           metric, feature_extractor)
 
     # Retrieve active learning strategy.
-    strategy = get_strategy(strategy_config["strategy_name"], strategy_config, dataset)
+    strategy = get_strategy(strategy_config["strategy_name"], strategy_config, trainer)
 
+    # Active learning experimental configuration.
+    if later_batch_size:
+        trainer.trainer_config["budget_per_iter"] = later_batch_size
+    
     # Active learning loop.
+    previous_model = None
+    L_size = 0
     for idx in range(1, num_batch + 1):
         if idx == 1:
             # Initial seed set use random sampling.
             new_idxs = np.random.choice(np.arange(len(dataset)), size=batch_size, replace=False)
+            old_idxs = np.array([])
         else:
             # Use active learning strategy to select for batch other than the first.
-            new_idxs = strategy.select(trainer, batch_size)
+            if strategy_config["strategy_name"] in ["eer", "bald"]:
+                if "batching" in strategy_config and "pseudo" in strategy_config["batching"]:
+                    new_idxs = strategy.select(trainer, batch_size, previous_model, labeled_features, labeled_labels)
+                else:
+                    new_idxs = strategy.select(trainer, batch_size, previous_model)
+            else:
+                new_idxs = strategy.select(trainer, batch_size)
+            old_idxs = dataset.labeled_idxs()
         dataset.update_labeled_idxs(new_idxs)
-        model = trainer.train()
+        if strategy_config["strategy_name"] in ["eer", "bald"] and "batching" in strategy_config and "pseudo" in strategy_config["batching"]:
+            model, train_loss, labeled_features, labeled_labels = trainer.train(return_input=True)
+        model, train_loss = trainer.train()
+        print(f"Iteration {idx} train loss: {train_loss}")
         trainer.evaluate_on_train(model)
         trainer.evaluate_on_val(model)
         trainer.evaluate_on_test(model)
         metric_dict = trainer.compute_metric(idx)
         wandb.log(metric_dict)
+        previous_model = copy.deepcopy(model)
+        L_size += batch_size
+        if later_batch_size is not None and idx == 1:
+            batch_size = later_batch_size
+            print(f"Batch size for later iterations changed to {batch_size}")
 
     # Log labeled examples in sampling order.
     for i, idx in enumerate(dataset.labeled_idxs()):

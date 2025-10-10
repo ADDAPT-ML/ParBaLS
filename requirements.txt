@@ -5,9 +5,12 @@ torchvision
 tqdm
 ftfy
 regex
-scipy
+scipy==1.12.0
 wandb
 git+https://github.com/openai/CLIP.git
 timm
 wilds
 open_clip_torch
+kaggle
+pymc
+arviz

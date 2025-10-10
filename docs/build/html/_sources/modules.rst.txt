@@ -1,7 +1,0 @@
-ALBench
-=======
-
-.. toctree::
-   :maxdepth: 4
-
-   ALBench

@@ -1,0 +1,5 @@
+{
+  "strategy_name" : "bald",
+  "posterior_subsample": 400,
+  "batching": "softmax"
+}

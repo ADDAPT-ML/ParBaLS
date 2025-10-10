@@ -1,0 +1,4 @@
+{
+  "strategy_name" : "bald",
+  "posterior_subsample": 400
+}

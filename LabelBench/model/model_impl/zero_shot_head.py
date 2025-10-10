@@ -10,8 +10,9 @@ def get_zeroshot_classifier(clip_model, tokenizer, classnames, template):
     template = getattr(templates, template)
     logit_scale = clip_model.logit_scale
 
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     clip_model.eval()
-    clip_model.cuda()
+    clip_model.to(device)
 
     print('Getting zeroshot weights.')
     with torch.no_grad():
@@ -20,7 +21,7 @@ def get_zeroshot_classifier(clip_model, tokenizer, classnames, template):
             texts = []
             for t in template:
                 texts.append(t(classname))
-            texts = tokenizer(texts).cuda()  # Tokenize.
+            texts = tokenizer(texts).to(device)  # Tokenize.
             embeddings = clip_model.encode_text(texts)  # Embed with text encoder.
             embeddings /= embeddings.norm(dim=-1, keepdim=True)
 
@@ -29,7 +30,7 @@ def get_zeroshot_classifier(clip_model, tokenizer, classnames, template):
 
             zeroshot_weights.append(embeddings)
 
-        zeroshot_weights = torch.stack(zeroshot_weights, dim=0).cuda()
+        zeroshot_weights = torch.stack(zeroshot_weights, dim=0).to(device)
         zeroshot_weights = torch.transpose(zeroshot_weights, 0, 2)
 
         zeroshot_weights *= logit_scale.exp()

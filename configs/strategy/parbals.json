@@ -1,0 +1,8 @@
+{
+  "strategy_name" : "eer",
+  "binary": true,
+  "posterior_subsample": 400,
+  "pool_subsample": 10000,
+  "val_subsample": 1000,
+  "batching": "multi-pseudo"
+}

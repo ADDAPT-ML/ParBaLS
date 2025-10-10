@@ -20,7 +20,7 @@ class FeatureExtractor:
         self.batch_size = \
             embed_model_config["inference_batch_size"] if "inference_batch_size" in embed_model_config else 128
         self.num_workers = embed_model_config["num_workers"] if "num_workers" in embed_model_config else 4
-
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.precomputed_features = {"train": None, "val": None, "test": None}
         self.num_transform_seeds = \
             embed_model_config["num_transform_seeds"] if "num_transform_seeds" in embed_model_config else 1
@@ -41,7 +41,7 @@ class FeatureExtractor:
                 filename = f'{self.file_name}_{seed}_features_{dataset_split}.pt'
             if os.path.exists(filename):
                 print(f"Loading features from {filename}")
-                features = torch.load(filename)
+                features = torch.load(filename, weights_only=False)
             else:
                 print(f"Start extracting features... and save to {filename}")
                 features = self.get_feature_helper(dataset, use_strong, dataset_split, seed=seed)
@@ -53,7 +53,7 @@ class FeatureExtractor:
 
     def get_feature_helper(self, dataset, use_strong, dataset_split, seed=None):
         if self.model is None:
-            self.model = self.model_fn(self.embed_model_config).cuda()
+            self.model = self.model_fn(self.embed_model_config).to(self.device)
 
         # Get model specific transform of dataset.
         print("Update the transform of dataset to model's special preprocess.")
@@ -79,9 +79,9 @@ class FeatureExtractor:
         for img, _, *other in tqdm(loader):
             if use_strong:
                 img, img_strong = img
-                img_strong = img_strong.float().cuda()
-            img = img.float().cuda()
-            with torch.cuda.amp.autocast(), torch.no_grad():
+                img_strong = img_strong.float().to(self.device)
+            img = img.float().to(self.device)
+            with torch.amp.autocast(self.device), torch.no_grad():
                 _, feature = self.model(img)
                 if use_strong:
                     _, feature_strong = self.model(img_strong)
