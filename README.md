@@ -1,6 +1,6 @@
 # ParBaLS: Myopic Bayesian Decision Theory for Batch Active Learning with Partial Batch Label Sampling
 
-Our experiments are based on [LabelBench](https://arxiv.org/abs/2306.09910), a well-established framework to benchmark label-efficient learning, including active learning.
+Our paper is available at [https://arxiv.org/abs/2510.09877](https://arxiv.org/abs/2510.09877). Our experiments are based on [LabelBench](https://arxiv.org/abs/2306.09910), a well-established framework to benchmark label-efficient learning, including active learning.
 
 ## Setup Python Environment
 
@@ -28,6 +28,7 @@ You can run our example run by:
 ```
 sh example_run.sh
 ```
+
 ## File Structure
 While the above section has introduced the entry points to our codebase, we now detail the structure of the rest.
 - `configs`: all of the configuration files for starting experiments, e.g. the evaluated algorithms in `configs/strategy`, the embedding models in `config/embed_model`, the trainable layers in `config/model`, etc.
@@ -38,3 +39,14 @@ While the above section has introduced the entry points to our codebase, we now 
 - `LabelBench/templates`: templates for loading zero-shot prediction heads.
 - `LabelBench/strategy`: different active learning strategies for selection of unlabeled examples, including Random, Confidence, BALD, EPIG, and their variants, e.g. with Gumbel noise or ParBaLS.
 - `LabelBench/trainer`: training strategies when given a partially labeled dataset. Currently we only include the supervised passive trainer.
+
+## Citation
+If you find our work useful, please consider citing us with the following BiBTex:
+```
+@article{hu2025myopic,
+  title={Myopic Bayesian Decision Theory for Batch Active Learning with Partial Batch Label Sampling},
+  author={Hu, Kangping and Mussmann, Stephen},
+  journal={arXiv preprint arXiv:2510.09877},
+  year={2025}
+}
+```
